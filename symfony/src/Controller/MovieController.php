@@ -2,104 +2,147 @@
 
 namespace App\Controller;
 
+use App\Entity\Movie;
+use App\Repository\GenreRepository;
+use App\Repository\MovieRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[Route('/movies')]
 final class MovieController extends AbstractController
 {
-    private const MOVIES = [
-        ['id' => 1, 'title' => 'Inception', 'description' => 'Sci-fi thriller', 'price' => 150],
-        ['id' => 2, 'title' => 'Interstellar', 'description' => 'Space drama', 'price' => 170],
-        ['id' => 3, 'title' => 'The Matrix', 'description' => 'Cyberpunk action', 'price' => 140],
-    ];
-
-    #[Route('/movies', name: 'get_movies', methods: [Request::METHOD_GET])]
-    public function getMovies(): JsonResponse
-    {
-        return new JsonResponse(['data' => self::MOVIES], Response::HTTP_OK);
+    public function __construct(
+        private readonly MovieRepository $movieRepository,
+        private readonly GenreRepository $genreRepository,
+        private readonly EntityManagerInterface $em,
+    ) {
     }
 
-    #[Route('/movies/{id}', name: 'get_movie_item', requirements: ['id' => '\d+'], methods: [Request::METHOD_GET])]
-    public function getMovieItem(int $id): JsonResponse
+    #[Route('', name: 'movie_index', methods: ['GET'])]
+    public function index(): JsonResponse
     {
-        $movie = $this->findMovieById($id);
+        $movies = array_map(fn (Movie $m) => $this->toArray($m), $this->movieRepository->findAll());
+
+        return new JsonResponse(['data' => $movies], Response::HTTP_OK);
+    }
+
+    #[Route('/{id}', name: 'movie_show', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function show(int $id): JsonResponse
+    {
+        $movie = $this->movieRepository->find($id);
 
         if (!$movie) {
-            return new JsonResponse(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
+            return $this->notFound($id);
         }
 
-        return new JsonResponse(['data' => $movie], Response::HTTP_OK);
+        return new JsonResponse(['data' => $this->toArray($movie)], Response::HTTP_OK);
     }
 
-    #[Route('/movies', name: 'post_movies', methods: [Request::METHOD_POST])]
-    public function createMovie(Request $request): JsonResponse
+    #[Route('', name: 'movie_create', methods: ['POST'])]
+    public function create(Request $request): JsonResponse
     {
-        $requestData = json_decode($request->getContent(), true);
+        $data = json_decode($request->getContent(), true);
 
-        if (!isset($requestData['title'], $requestData['description'], $requestData['price'])) {
-            return new JsonResponse(['data' => ['error' => 'title, description and price are required']], Response::HTTP_BAD_REQUEST);
+        if (empty($data['title']) || !isset($data['duration'], $data['price'], $data['genre_id'])) {
+            return new JsonResponse(
+                ['data' => ['error' => 'title, duration, price and genre_id are required']],
+                Response::HTTP_BAD_REQUEST
+            );
         }
 
-        $newMovieData = [
-            'id'          => max(array_column(self::MOVIES, 'id')) + 1,
-            'title'       => $requestData['title'],
-            'description' => $requestData['description'],
-            'price'       => $requestData['price'],
-        ];
+        $genre = $this->genreRepository->find((int) $data['genre_id']);
 
-        // TODO insert to db
+        if (!$genre) {
+            return new JsonResponse(['data' => ['error' => 'Genre not found']], Response::HTTP_BAD_REQUEST);
+        }
 
-        return new JsonResponse(['data' => $newMovieData], Response::HTTP_CREATED);
+        $movie = (new Movie())
+            ->setTitle($data['title'])
+            ->setDescription($data['description'] ?? null)
+            ->setDuration((int) $data['duration'])
+            ->setPrice((string) $data['price'])
+            ->setGenre($genre);
+
+        $this->em->persist($movie);
+        $this->em->flush();
+
+        return new JsonResponse(['data' => $this->toArray($movie)], Response::HTTP_CREATED);
     }
 
-    #[Route('/movies/{id}', name: 'put_movie', requirements: ['id' => '\d+'], methods: [Request::METHOD_PUT])]
-    public function updateMovie(int $id, Request $request): JsonResponse
+    #[Route('/{id}', name: 'movie_update', requirements: ['id' => '\d+'], methods: ['PUT'])]
+    public function update(int $id, Request $request): JsonResponse
     {
-        $movie = $this->findMovieById($id);
+        $movie = $this->movieRepository->find($id);
 
         if (!$movie) {
-            return new JsonResponse(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
+            return $this->notFound($id);
         }
 
-        $requestData = json_decode($request->getContent(), true) ?? [];
+        $data = json_decode($request->getContent(), true) ?? [];
 
-        $updatedMovie = [
-            'id'          => $movie['id'],
-            'title'       => $requestData['title'] ?? $movie['title'],
-            'description' => $requestData['description'] ?? $movie['description'],
-            'price'       => $requestData['price'] ?? $movie['price'],
-        ];
+        if (isset($data['title'])) {
+            $movie->setTitle($data['title']);
+        }
+        if (array_key_exists('description', $data)) {
+            $movie->setDescription($data['description']);
+        }
+        if (isset($data['duration'])) {
+            $movie->setDuration((int) $data['duration']);
+        }
+        if (isset($data['price'])) {
+            $movie->setPrice((string) $data['price']);
+        }
+        if (isset($data['genre_id'])) {
+            $genre = $this->genreRepository->find((int) $data['genre_id']);
 
-        // TODO update in db
+            if (!$genre) {
+                return new JsonResponse(['data' => ['error' => 'Genre not found']], Response::HTTP_BAD_REQUEST);
+            }
 
-        return new JsonResponse(['data' => $updatedMovie], Response::HTTP_OK);
+            $movie->setGenre($genre);
+        }
+
+        $this->em->flush();
+
+        return new JsonResponse(['data' => $this->toArray($movie)], Response::HTTP_OK);
     }
 
-    #[Route('/movies/{id}', name: 'delete_movie', requirements: ['id' => '\d+'], methods: [Request::METHOD_DELETE])]
-    public function deleteMovie(int $id): JsonResponse
+    #[Route('/{id}', name: 'movie_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    public function delete(int $id): JsonResponse
     {
-        $movie = $this->findMovieById($id);
+        $movie = $this->movieRepository->find($id);
 
         if (!$movie) {
-            return new JsonResponse(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
+            return $this->notFound($id);
         }
 
-        // TODO delete from db
+        $this->em->remove($movie);
+        $this->em->flush();
 
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
 
-    private function findMovieById(int $id): ?array
+    private function toArray(Movie $movie): array
     {
-        foreach (self::MOVIES as $movie) {
-            if ($movie['id'] === $id) {
-                return $movie;
-            }
-        }
+        return [
+            'id' => $movie->getId(),
+            'title' => $movie->getTitle(),
+            'description' => $movie->getDescription(),
+            'duration' => $movie->getDuration(),
+            'price' => $movie->getPrice(),
+            'genre' => [
+                'id' => $movie->getGenre()?->getId(),
+                'name' => $movie->getGenre()?->getName(),
+            ],
+        ];
+    }
 
-        return null;
+    private function notFound(int $id): JsonResponse
+    {
+        return new JsonResponse(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
     }
 }
