@@ -3,14 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\Hall;
+use App\Services\ListQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class HallController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct(private readonly ListQueryService $listQuery)
     {
-        return response()->json(['data' => Hall::all()]);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        return response()->json($this->listQuery->paginate(Hall::query(), $request, [
+            'id' => ['id', 'eq'],
+            'name' => ['name', 'like'],
+            'capacity' => ['capacity', 'eq'],
+        ]));
     }
 
     public function show(Hall $hall): JsonResponse

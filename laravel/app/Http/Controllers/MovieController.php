@@ -3,14 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Models\Movie;
+use App\Services\ListQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class MovieController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct(private readonly ListQueryService $listQuery)
     {
-        return response()->json(['data' => Movie::with('genre')->get()]);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        return response()->json($this->listQuery->paginate(Movie::query()->with('genre'), $request, [
+            'id' => ['id', 'eq'],
+            'title' => ['title', 'like'],
+            'description' => ['description', 'like'],
+            'duration' => ['duration', 'eq'],
+            'price' => ['price', 'eq'],
+            'genre_id' => ['genre_id', 'eq'],
+        ]));
     }
 
     public function show(Movie $movie): JsonResponse

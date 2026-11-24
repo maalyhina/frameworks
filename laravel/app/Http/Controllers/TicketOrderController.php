@@ -3,14 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\TicketOrder;
+use App\Services\ListQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class TicketOrderController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct(private readonly ListQueryService $listQuery)
     {
-        return response()->json(['data' => TicketOrder::with(['customer', 'screening'])->get()]);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        return response()->json($this->listQuery->paginate(TicketOrder::query()->with(['customer', 'screening']), $request, [
+            'id' => ['id', 'eq'],
+            'quantity' => ['quantity', 'eq'],
+            'created_at' => ['created_at', 'date'],
+            'customer_id' => ['customer_id', 'eq'],
+            'screening_id' => ['screening_id', 'eq'],
+        ]));
     }
 
     public function show(TicketOrder $ticketOrder): JsonResponse

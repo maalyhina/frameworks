@@ -3,14 +3,24 @@
 namespace App\Http\Controllers;
 
 use App\Models\Screening;
+use App\Services\ListQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ScreeningController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct(private readonly ListQueryService $listQuery)
     {
-        return response()->json(['data' => Screening::with(['movie', 'hall'])->get()]);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        return response()->json($this->listQuery->paginate(Screening::query()->with(['movie', 'hall']), $request, [
+            'id' => ['id', 'eq'],
+            'starts_at' => ['starts_at', 'date'],
+            'movie_id' => ['movie_id', 'eq'],
+            'hall_id' => ['hall_id', 'eq'],
+        ]));
     }
 
     public function show(Screening $screening): JsonResponse
