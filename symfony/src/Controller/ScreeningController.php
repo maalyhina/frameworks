@@ -12,25 +12,35 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use App\Service\ListQueryService;
 
 #[Route('/screenings')]
 final class ScreeningController extends AbstractController
 {
     public function __construct(
-        private readonly ScreeningRepository $screeningRepository,
-        private readonly MovieRepository $movieRepository,
-        private readonly HallRepository $hallRepository,
-        private readonly EntityManagerInterface $em,
-    ) {
-    }
+    private readonly ScreeningRepository $screeningRepository,
+    private readonly MovieRepository $movieRepository,
+    private readonly HallRepository $hallRepository,
+    private readonly EntityManagerInterface $em,
+    private readonly ListQueryService $listQuery,
+) {
+}
 
     #[Route('', name: 'screening_index', methods: ['GET'])]
-    public function index(): JsonResponse
-    {
-        $items = array_map(fn (Screening $s) => $this->toArray($s), $this->screeningRepository->findAll());
+public function index(Request $request): JsonResponse
+{
+    $result = $this->listQuery->paginate(Screening::class, $request, [
+        'id' => ['id', 'eq'],
+        'starts_at' => ['startsAt', 'date'],
+        'movie_id' => ['movie', 'eq'],
+        'hall_id' => ['hall', 'eq'],
+    ]);
 
-        return new JsonResponse(['data' => $items], Response::HTTP_OK);
-    }
+    return new JsonResponse([
+        'data' => array_map(fn (Screening $s) => $this->toArray($s), $result['items']),
+        'meta' => $result['meta'],
+    ], Response::HTTP_OK);
+}
 
     #[Route('/{id}', name: 'screening_show', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function show(int $id): JsonResponse

@@ -10,23 +10,32 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use App\Service\ListQueryService;
 
 #[Route('/customers')]
 final class CustomerController extends AbstractController
 {
     public function __construct(
-        private readonly CustomerRepository $customerRepository,
-        private readonly EntityManagerInterface $em,
-    ) {
-    }
+    private readonly CustomerRepository $customerRepository,
+    private readonly EntityManagerInterface $em,
+    private readonly ListQueryService $listQuery,
+) {
+}
 
     #[Route('', name: 'customer_index', methods: ['GET'])]
-    public function index(): JsonResponse
-    {
-        $customers = array_map(fn (Customer $c) => $this->toArray($c), $this->customerRepository->findAll());
+public function index(Request $request): JsonResponse
+{
+    $result = $this->listQuery->paginate(Customer::class, $request, [
+        'id' => ['id', 'eq'],
+        'name' => ['name', 'like'],
+        'email' => ['email', 'like'],
+    ]);
 
-        return new JsonResponse(['data' => $customers], Response::HTTP_OK);
-    }
+    return new JsonResponse([
+        'data' => array_map(fn (Customer $c) => $this->toArray($c), $result['items']),
+        'meta' => $result['meta'],
+    ], Response::HTTP_OK);
+}
 
     #[Route('/{id}', name: 'customer_show', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function show(int $id): JsonResponse

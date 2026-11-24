@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Genre;
 use App\Repository\GenreRepository;
+use App\Service\ListQueryService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,15 +18,22 @@ final class GenreController extends AbstractController
     public function __construct(
         private readonly GenreRepository $genreRepository,
         private readonly EntityManagerInterface $em,
+        private readonly ListQueryService $listQuery,
     ) {
     }
 
     #[Route('', name: 'genre_index', methods: ['GET'])]
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $genres = array_map(fn (Genre $g) => $this->toArray($g), $this->genreRepository->findAll());
+        $result = $this->listQuery->paginate(Genre::class, $request, [
+            'id' => ['id', 'eq'],
+            'name' => ['name', 'like'],
+        ]);
 
-        return new JsonResponse(['data' => $genres], Response::HTTP_OK);
+        return new JsonResponse([
+            'data' => array_map(fn (Genre $g) => $this->toArray($g), $result['items']),
+            'meta' => $result['meta'],
+        ], Response::HTTP_OK);
     }
 
     #[Route('/{id}', name: 'genre_show', requirements: ['id' => '\d+'], methods: ['GET'])]

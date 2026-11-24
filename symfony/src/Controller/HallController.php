@@ -10,24 +10,32 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use App\Service\ListQueryService;
 
 #[Route('/halls')]
 final class HallController extends AbstractController
 {
     public function __construct(
-        private readonly HallRepository $hallRepository,
-        private readonly EntityManagerInterface $em,
-    ) {
-    }
+    private readonly HallRepository $hallRepository,
+    private readonly EntityManagerInterface $em,
+    private readonly ListQueryService $listQuery,
+) {
+}
 
     #[Route('', name: 'hall_index', methods: ['GET'])]
-    public function index(): JsonResponse
-    {
-        $halls = array_map(fn (Hall $h) => $this->toArray($h), $this->hallRepository->findAll());
+public function index(Request $request): JsonResponse
+{
+    $result = $this->listQuery->paginate(Hall::class, $request, [
+        'id' => ['id', 'eq'],
+        'name' => ['name', 'like'],
+        'capacity' => ['capacity', 'eq'],
+    ]);
 
-        return new JsonResponse(['data' => $halls], Response::HTTP_OK);
-    }
-
+    return new JsonResponse([
+        'data' => array_map(fn (Hall $h) => $this->toArray($h), $result['items']),
+        'meta' => $result['meta'],
+    ], Response::HTTP_OK);
+}
     #[Route('/{id}', name: 'hall_show', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function show(int $id): JsonResponse
     {

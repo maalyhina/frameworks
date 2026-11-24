@@ -12,25 +12,37 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use App\Service\ListQueryService;
 
 #[Route('/orders')]
 final class TicketOrderController extends AbstractController
 {
     public function __construct(
-        private readonly TicketOrderRepository $orderRepository,
-        private readonly CustomerRepository $customerRepository,
-        private readonly ScreeningRepository $screeningRepository,
-        private readonly EntityManagerInterface $em,
-    ) {
-    }
+    private readonly TicketOrderRepository $orderRepository,
+    private readonly CustomerRepository $customerRepository,
+    private readonly ScreeningRepository $screeningRepository,
+    private readonly EntityManagerInterface $em,
+    private readonly ListQueryService $listQuery,
+) {
+}
+
 
     #[Route('', name: 'order_index', methods: ['GET'])]
-    public function index(): JsonResponse
-    {
-        $items = array_map(fn (TicketOrder $o) => $this->toArray($o), $this->orderRepository->findAll());
+public function index(Request $request): JsonResponse
+{
+    $result = $this->listQuery->paginate(TicketOrder::class, $request, [
+        'id' => ['id', 'eq'],
+        'quantity' => ['quantity', 'eq'],
+        'created_at' => ['createdAt', 'date'],
+        'customer_id' => ['customer', 'eq'],
+        'screening_id' => ['screening', 'eq'],
+    ]);
 
-        return new JsonResponse(['data' => $items], Response::HTTP_OK);
-    }
+    return new JsonResponse([
+        'data' => array_map(fn (TicketOrder $o) => $this->toArray($o), $result['items']),
+        'meta' => $result['meta'],
+    ], Response::HTTP_OK);
+}
 
     #[Route('/{id}', name: 'order_show', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function show(int $id): JsonResponse
