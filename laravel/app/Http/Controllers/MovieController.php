@@ -2,97 +2,54 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Movie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 
 class MovieController extends Controller
 {
-    private const MOVIES = [
-        ['id' => 1, 'title' => 'Inception', 'description' => 'Sci-fi thriller', 'price' => 150],
-        ['id' => 2, 'title' => 'Interstellar', 'description' => 'Space drama', 'price' => 170],
-        ['id' => 3, 'title' => 'The Matrix', 'description' => 'Cyberpunk action', 'price' => 140],
-    ];
-
-    public function getMovies(): JsonResponse
+    public function index(): JsonResponse
     {
-        return response()->json(['data' => self::MOVIES], Response::HTTP_OK);
+        return response()->json(['data' => Movie::with('genre')->get()]);
     }
 
-    public function getMovieItem(int $id): JsonResponse
+    public function show(Movie $movie): JsonResponse
     {
-        $movie = $this->findMovieById($id);
-
-        if (!$movie) {
-            return response()->json(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
-        }
-
-        return response()->json(['data' => $movie], Response::HTTP_OK);
+        return response()->json(['data' => $movie->load('genre')]);
     }
 
-    public function createMovie(Request $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        $requestData = json_decode($request->getContent(), true);
+        $data = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'duration' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0',
+            'genre_id' => 'required|exists:genres,id',
+        ]);
+        $movie = Movie::create($data);
 
-        if (!isset($requestData['title'], $requestData['description'], $requestData['price'])) {
-            return response()->json(['data' => ['error' => 'title, description and price are required']], Response::HTTP_BAD_REQUEST);
-        }
-
-        $newMovieData = [
-            'id'          => max(array_column(self::MOVIES, 'id')) + 1,
-            'title'       => $requestData['title'],
-            'description' => $requestData['description'],
-            'price'       => $requestData['price'],
-        ];
-
-        // TODO insert to db
-
-        return response()->json(['data' => $newMovieData], Response::HTTP_CREATED);
+        return response()->json(['data' => $movie->load('genre')], 201);
     }
 
-    public function updateMovie(int $id, Request $request): JsonResponse
+    public function update(Request $request, Movie $movie): JsonResponse
     {
-        $movie = $this->findMovieById($id);
+        $data = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'duration' => 'sometimes|integer|min:1',
+            'price' => 'sometimes|numeric|min:0',
+            'genre_id' => 'sometimes|exists:genres,id',
+        ]);
+        $movie->update($data);
 
-        if (!$movie) {
-            return response()->json(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
-        }
-
-        $requestData = json_decode($request->getContent(), true) ?? [];
-
-        $updatedMovie = [
-            'id'          => $movie['id'],
-            'title'       => $requestData['title'] ?? $movie['title'],
-            'description' => $requestData['description'] ?? $movie['description'],
-            'price'       => $requestData['price'] ?? $movie['price'],
-        ];
-
-        // TODO update in db
-
-        return response()->json(['data' => $updatedMovie], Response::HTTP_OK);
+        return response()->json(['data' => $movie->load('genre')]);
     }
 
-    public function deleteMovie(int $id): JsonResponse
+    public function destroy(Movie $movie): JsonResponse
     {
-        $movie = $this->findMovieById($id);
+        $movie->delete();
 
-        if (!$movie) {
-            return response()->json(['data' => ['error' => 'Not found movie by id ' . $id]], Response::HTTP_NOT_FOUND);
-        }
-
-        // TODO delete from db
-
-        return response()->json(null, Response::HTTP_NO_CONTENT);
-    }
-
-    private function findMovieById(int $id): ?array
-    {
-        foreach (self::MOVIES as $movie) {
-            if ($movie['id'] === $id) {
-                return $movie;
-            }
-        }
-
-        return null;
+        return response()->json(null, 204);
     }
 }
